@@ -4,17 +4,25 @@ from events import generate_random_event
 from minigames import get_random_minigame
 from logs import generate_log
 
-#* Init
+# ----------------------------
+# Init & Constants
+# ----------------------------
 pygame.init()
 info = pygame.display.Info()
 WIDTH, HEIGHT = info.current_w, info.current_h
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Rover Event Control")
 
-MISSION_TIME = 300  # 5 min
 MAX_ACTIVE_EVENTS = 5
 
-# state config
+# Game States
+STATE_MENU = 0
+STATE_PLAYING = 1
+STATE_GAME_OVER = 2
+current_state = STATE_MENU
+
+# Game variables
+MISSION_TIME = 300  # default 5 min
 event_id_counter = 1
 incoming_events = []
 active_events = []
@@ -28,13 +36,31 @@ start_time = time.time()
 # Logs
 logs = []
 last_log_time = 0
-
-# Healing mini-game trigger
 next_heal_trigger = random.randint(20, 40)
 
 font = get_font(22)
 
-# Buttons
+# ----------------------------
+# Reset Game
+# ----------------------------
+def reset_game():
+    global event_id_counter, incoming_events, active_events, queued_events
+    global selected_event, selected_list, health, score, start_time, logs, next_heal_trigger
+    event_id_counter = 1
+    incoming_events.clear()
+    active_events.clear()
+    queued_events.clear()
+    selected_event = None
+    selected_list = None
+    health = 100
+    score = 0
+    logs.clear()
+    start_time = time.time()
+    next_heal_trigger = random.randint(20, 40)
+
+# ----------------------------
+# Buttons for gameplay
+# ----------------------------
 buttons = []
 button_labels = [
     ("Honor [H]", lambda: honor_event()),
@@ -58,7 +84,9 @@ def center_buttons():
 
 center_buttons()
 
-#* Game functions
+# ----------------------------
+# Event Actions
+# ----------------------------
 def honor_event():
     global selected_event, selected_list, health, score
     if selected_event and selected_list == "incoming" and len(active_events) < MAX_ACTIVE_EVENTS:
@@ -129,7 +157,9 @@ def trigger_minigame():
     mg = get_random_minigame()
     return mg(WIN)
 
-#* UI
+# ----------------------------
+# UI Drawing
+# ----------------------------
 incoming_rects, active_rects, queue_rects = [], [], []
 
 def draw_event_list(events, title, x, y, list_name, rect_store, show_timer=False):
@@ -137,11 +167,9 @@ def draw_event_list(events, title, x, y, list_name, rect_store, show_timer=False
     rect_store.clear()
 
     box_width = 400
-    max_width = box_width - 10  # padding inside box
-    base_font = font
-
-    vertical_spacing = 42  # spacing between entries
-    box_height = 32        # height of each event box
+    max_width = box_width - 10
+    vertical_spacing = 46   # more padding
+    box_height = 32
 
     for i, ev in enumerate(events[:8]):
         rect_y = y + 30 + i * vertical_spacing
@@ -163,28 +191,20 @@ def draw_event_list(events, title, x, y, list_name, rect_store, show_timer=False
 
         text_color = get_contrast_color(priority_color)
 
-        # Word wrapping by pixel width
+        # Simple wrapping
         words = text.split(" ")
         lines = [""]
         for word in words:
             test_line = lines[-1] + word + " "
-            if base_font.size(test_line)[0] <= max_width:
+            if font.size(test_line)[0] <= max_width:
                 lines[-1] = test_line
             else:
                 lines.append(word + " ")
 
-        # Shrink font if >2 lines
-        if len(lines) > 2:
-            small_font = get_font(18)
-            lines = [" ".join(words[:len(words)//2]), " ".join(words[len(words)//2:])]
-            for j, line in enumerate(lines[:2]):
-                WIN.blit(small_font.render(line.strip(), True, text_color),
-                         (x+5, rect_y + j*14))
-        else:
-            for j, line in enumerate(lines):
-                WIN.blit(base_font.render(line.strip(), True, text_color),
-                         (x+5, rect_y + j*14))
-        
+        for j, line in enumerate(lines[:2]):
+            WIN.blit(font.render(line.strip(), True, text_color),
+                     (x+5, rect_y + j*14))
+
 def draw_ui():
     WIN.fill((30, 30, 30))
 
@@ -196,9 +216,10 @@ def draw_ui():
     WIN.blit(font.render(f"Score: {score}", True, WHITE), (WIDTH//2 - 50, 55))
 
     # Timer
-    elapsed = int(time.time() - start_time)
-    remaining = max(0, MISSION_TIME - elapsed)
-    WIN.blit(font.render(f"Time: {remaining}s", True, WHITE), (WIDTH//2 - 50, 80))
+    if MISSION_TIME:
+        elapsed = int(time.time() - start_time)
+        remaining = max(0, MISSION_TIME - elapsed)
+        WIN.blit(font.render(f"Time: {remaining}s", True, WHITE), (WIDTH//2 - 50, 80))
 
     # Event lists
     margin_top = 120
@@ -220,7 +241,7 @@ def draw_ui():
         if isinstance(entry, tuple):
             log, color = entry
         else:
-            log, color = entry, WHITE  # fallback for old string logs
+            log, color = entry, WHITE
         WIN.blit(font.render(log, True, color), (log_area.x + 10, log_area.y + 5 + i*22))
 
     # Buttons
@@ -229,7 +250,63 @@ def draw_ui():
 
     pygame.display.update()
 
-# Input processor
+# ----------------------------
+# Main Menu
+# ----------------------------
+def draw_menu():
+    WIN.fill((20, 20, 20))
+    title_font = get_font(48)
+    WIN.blit(title_font.render("Rover Event Control", True, ORANGE), (WIDTH//2 - 220, 150))
+
+    menu_buttons = [
+        Button((WIDTH//2 - 100, 300, 200, 50), "Play (5 min)", start_game_5min),
+        Button((WIDTH//2 - 100, 370, 200, 50), "Play (Infinite)", start_game_infinite),
+        Button((WIDTH//2 - 100, 440, 200, 50), "Quit", lambda: sys.exit())
+    ]
+
+    for btn in menu_buttons:
+        btn.draw(WIN, font)
+    pygame.display.update()
+    return menu_buttons
+
+def start_game_5min():
+    global current_state, MISSION_TIME
+    reset_game()
+    MISSION_TIME = 300
+    current_state = STATE_PLAYING
+
+def start_game_infinite():
+    global current_state, MISSION_TIME
+    reset_game()
+    MISSION_TIME = None
+    current_state = STATE_PLAYING
+
+# ----------------------------
+# Game Over Screen
+# ----------------------------
+def draw_game_over(message):
+    WIN.fill((10, 10, 10))
+    title_font = get_font(48)
+    WIN.blit(title_font.render(message, True, WHITE), (WIDTH//2 - 200, 200))
+    WIN.blit(font.render(f"Final Score: {score}", True, WHITE), (WIDTH//2 - 80, 280))
+
+    over_buttons = [
+        Button((WIDTH//2 - 120, 360, 240, 50), "Return to Main Menu", return_to_menu),
+        Button((WIDTH//2 - 120, 430, 240, 50), "Exit to Desktop", lambda: sys.exit())
+    ]
+
+    for btn in over_buttons:
+        btn.draw(WIN, font)
+    pygame.display.update()
+    return over_buttons
+
+def return_to_menu():
+    global current_state
+    current_state = STATE_MENU
+
+# ----------------------------
+# Input
+# ----------------------------
 def handle_click(pos):
     global selected_event, selected_list
     for rect, ev in incoming_rects:
@@ -248,79 +325,100 @@ def handle_click(pos):
         if btn.rect.collidepoint(pos):
             btn.action()
 
-#* GAME LOOP
+# ----------------------------
+# Game Loop
+# ----------------------------
 clock = pygame.time.Clock()
 spawn_timer = 0
+menu_buttons = []
+over_buttons = []
 
 running = True
 while running:
     clock.tick(60)
-    spawn_timer += 1
-    elapsed = int(time.time() - start_time)
 
-    # Spawn new event every 3s
-    if spawn_timer >= 180:
-        incoming_events.append(generate_random_event(event_id_counter))
-        event_id_counter += 1
-        spawn_timer = 0
+    if current_state == STATE_MENU:
+        menu_buttons = draw_menu()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for btn in menu_buttons:
+                    if btn.rect.collidepoint(event.pos):
+                        btn.action()
 
-    # Expire incoming events
-    for ev in incoming_events[:]:
-        ev.expire_time -= 1/60
-        if ev.expire_time <= 0:
-            incoming_events.remove(ev)
-            health -= ev.impact
-            logs.append(f"Missed: {ev.hint_text()} (-{ev.impact} HP)")
+    elif current_state == STATE_PLAYING:
+        spawn_timer += 1
+        elapsed = int(time.time() - start_time)
 
-    # Decrement active events timer
-    for ev in active_events[:]:
-        ev.duration -= 1/60
-        if ev.duration <= 0:
-            active_events.remove(ev)
-            score += ev.benefit
-            logs.append(f"Completed: {ev.hint_text()} (+{ev.benefit} pts)")
+        # Spawn new event every 3s
+        if spawn_timer >= 180:
+            incoming_events.append(generate_random_event(event_id_counter))
+            event_id_counter += 1
+            spawn_timer = 0
 
-    # Generate logs every 0.5s
-    if time.time() - last_log_time >= 0.5:
-        logs.append(generate_log())
-        if len(logs) > 30:
-            logs.pop(0)
-        last_log_time = time.time()
+        # Expire incoming events
+        for ev in incoming_events[:]:
+            ev.expire_time -= 1/60
+            if ev.expire_time <= 0:
+                incoming_events.remove(ev)
+                health -= ev.impact
+                logs.append(f"Missed: {ev.hint_text()} (-{ev.impact} HP)")
 
-    # Random healing mini-game
-    if elapsed >= next_heal_trigger:
-        if trigger_minigame():
-            health = min(100, health + 15)
-            logs.append("Healing mini-game success! +15 HP")
-        next_heal_trigger = elapsed + (random.randint(10,20) if health < 30 else random.randint(20,40))
+        # Decrement active events timer
+        for ev in active_events[:]:
+            ev.duration -= 1/60
+            if ev.duration <= 0:
+                active_events.remove(ev)
+                score += ev.benefit
+                logs.append(f"Completed: {ev.hint_text()} (+{ev.benefit} pts)")
 
-    # Check fail/win
-    if health <= 0 or elapsed >= MISSION_TIME:
-        WIN.fill(BLACK)
-        msg = "MISSION SUCCESS!" if health > 0 else "ROVER FAILURE!"
-        WIN.blit(font.render(f"{msg} Final Health: {health}, Score: {score}", True, WHITE), (WIDTH//2 - 200, HEIGHT//2))
-        pygame.display.update()
-        pygame.time.wait(3000)
-        pygame.quit()
-        sys.exit()
+        # Generate logs every 0.5s
+        if time.time() - last_log_time >= 0.5:
+            logs.append(generate_log())
+            if len(logs) > 30:
+                logs.pop(0)
+            last_log_time = time.time()
 
-    # Input
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            handle_click(event.pos)
-        if event.type == pygame.MOUSEMOTION:
-            for btn in buttons:
-                btn.handle_event(event)
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_h: honor_event()
-            elif event.key == pygame.K_r: reject_event()
-            elif event.key == pygame.K_q: queue_event()
-            elif event.key == pygame.K_s: execute_from_queue()
-            elif event.key == pygame.K_t: terminate_event()
-            elif event.key == pygame.K_m: modify_priority()
-            elif event.key == pygame.K_n: modify_priority_down()
+        # Random healing mini-game
+        if elapsed >= next_heal_trigger:
+            if trigger_minigame():
+                health = min(100, health + 15)
+                logs.append("Healing mini-game success! +15 HP")
+            next_heal_trigger = elapsed + (random.randint(10,20) if health < 30 else random.randint(20,40))
 
-    draw_ui()
+        # Check fail/win
+        if health <= 0 or (MISSION_TIME and elapsed >= MISSION_TIME):
+            message = "MISSION SUCCESS!" if health > 0 else "ROVER FAILURE!"
+            current_state = STATE_GAME_OVER
+            game_over_message = message
+
+        # Input
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                handle_click(event.pos)
+            if event.type == pygame.MOUSEMOTION:
+                for btn in buttons:
+                    btn.handle_event(event)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_h: honor_event()
+                elif event.key == pygame.K_r: reject_event()
+                elif event.key == pygame.K_q: queue_event()
+                elif event.key == pygame.K_s: execute_from_queue()
+                elif event.key == pygame.K_t: terminate_event()
+                elif event.key == pygame.K_m: modify_priority()
+                elif event.key == pygame.K_n: modify_priority_down()
+
+        draw_ui()
+
+    elif current_state == STATE_GAME_OVER:
+        over_buttons = draw_game_over(game_over_message)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for btn in over_buttons:
+                    if btn.rect.collidepoint(event.pos):
+                        btn.action()

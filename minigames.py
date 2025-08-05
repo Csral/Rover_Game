@@ -10,7 +10,43 @@ def show_message(surface, text, size=50, duration=1.5, color=(255,255,255)):
     rect = msg.get_rect(center=(WIDTH//2, HEIGHT//2))
     surface.blit(msg, rect)
     pygame.display.update()
-    pygame.time.wait(int(duration*1000))
+    pygame.time.wait(int(duration*1000))\
+    
+def get_user_input(surface, prompt="", font_size=50, max_time=7):
+    """
+    Displays a prompt and collects keyboard input with Enter.
+    Returns typed string or None on timeout.
+    """
+    font = pygame.font.SysFont("consolas", font_size)
+    clock = pygame.time.Clock()
+    input_str = ""
+    start_time = time.time()
+
+    while True:
+        # Timeout
+        if time.time() - start_time > max_time:
+            return None
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return input_str
+                elif event.key == pygame.K_BACKSPACE:
+                    input_str = input_str[:-1]
+                elif event.key <= 127:  # printable chars
+                    input_str += event.unicode
+
+        # Draw prompt and typed text
+        surface.fill((0,0,0))
+        if prompt:
+            prompt_text = font.render(prompt, True, (255,255,255))
+            surface.blit(prompt_text, prompt_text.get_rect(center=(WIDTH//2, HEIGHT//2 - 50)))
+        typed_text = font.render(input_str, True, (0,255,0))
+        surface.blit(typed_text, typed_text.get_rect(center=(WIDTH//2, HEIGHT//2)))
+        pygame.display.update()
+        clock.tick(30)
 
 # ---------------- Mini-Games ----------------
 
@@ -154,58 +190,90 @@ def tic_tac_toe(surface):
 
 def number_memory(surface):
     numbers = [random.randint(0,9) for _ in range(4)]
+    seq = "".join(map(str, numbers))
+
     show_message(surface, "Memorize the numbers!", 40, 2)
     font = pygame.font.SysFont("consolas", 50)
-    surface.fill((0,0,0))
-    seq = " ".join(map(str,numbers))
-    msg = font.render(seq, True, (255,255,255))
-    rect = msg.get_rect(center=(WIDTH//2, HEIGHT//2))
-    surface.blit(msg, rect)
-    pygame.display.update()
-    pygame.time.wait(2000)  # show for 2s
 
-    # In prototype: simulate success
-    return random.random() > 0.3
+    # Show numbers
+    surface.fill((0,0,0))
+    msg = font.render(" ".join(seq), True, (255,255,255))
+    surface.blit(msg, msg.get_rect(center=(WIDTH//2, HEIGHT//2)))
+    pygame.display.update()
+    pygame.time.wait(2000)
+
+    # Get input
+    ans = get_user_input(surface, "Enter the numbers:")
+
+    return ans == seq
 
 def quick_math(surface):
     a, b = random.randint(1,9), random.randint(1,9)
+    correct_answer = str(a + b)
+
     show_message(surface, "Solve Quickly!", 40, 2)
     font = pygame.font.SysFont("consolas", 60)
-    question = f"{a} + {b} = ?"
+
+    # Show question
     surface.fill((0,0,0))
-    msg = font.render(question, True, (255,255,255))
-    rect = msg.get_rect(center=(WIDTH//2, HEIGHT//2))
-    surface.blit(msg, rect)
+    msg = font.render(f"{a} + {b} = ?", True, (255,255,255))
+    surface.blit(msg, msg.get_rect(center=(WIDTH//2, HEIGHT//2)))
     pygame.display.update()
-    pygame.time.wait(2000)
-    return random.random() > 0.2
+
+    # Get input
+    ans = get_user_input(surface, "Your answer:")
+
+    return ans == correct_answer
 
 def typing_challenge(surface):
     words = ["mars","rover","sample","signal","dust"]
     word = random.choice(words)
+
     show_message(surface, "Type the word shown!", 40, 2)
     font = pygame.font.SysFont("consolas", 60)
+
+    # Show word
     surface.fill((0,0,0))
     msg = font.render(word, True, (255,255,255))
-    rect = msg.get_rect(center=(WIDTH//2, HEIGHT//2))
-    surface.blit(msg, rect)
+    surface.blit(msg, msg.get_rect(center=(WIDTH//2, HEIGHT//2)))
     pygame.display.update()
-    pygame.time.wait(2000)
-    return random.random() > 0.25
+
+    # Get input
+    ans = get_user_input(surface, "Type it exactly:")
+
+    return ans == word
 
 def color_match(surface):
     colors = [("RED",(255,0,0)),("GREEN",(0,255,0)),("BLUE",(0,0,255))]
-    word, color = random.choice(colors)
-    mismatch_color = random.choice([c[1] for c in colors if c[0]!=word])
-    show_message(surface, "Pick correct color meaning!", 40, 2)
+    word, _ = random.choice(colors)
+    mismatch_color = random.choice([c[1] for c in colors])  # may or may not mismatch
+
+    show_message(surface, "Press R/G/B for WORD (not color)", 30, 2)
     font = pygame.font.SysFont("consolas", 60)
+
+    # Show color word
     surface.fill((0,0,0))
     msg = font.render(word, True, mismatch_color)
-    rect = msg.get_rect(center=(WIDTH//2, HEIGHT//2))
-    surface.blit(msg, rect)
+    surface.blit(msg, msg.get_rect(center=(WIDTH//2, HEIGHT//2)))
     pygame.display.update()
-    pygame.time.wait(2000)
-    return random.random() > 0.3
+
+    # Wait for keypress
+    start_time = time.time()
+    while True:
+        if time.time() - start_time > 5:  # timeout
+            return False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r and word == "RED":
+                    return True
+                if event.key == pygame.K_g and word == "GREEN":
+                    return True
+                if event.key == pygame.K_b and word == "BLUE":
+                    return True
+                else:
+                    return False
 
 # ---------------- Game Picker ----------------
 
